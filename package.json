@@ -1,0 +1,22 @@
+{
+  "name": "@lowlevellogic/a2a-escrow-worker",
+  "version": "2.0.0",
+  "description": "Agentic Micro-Escrow verification proxy for Low Level Logic Labs LLC",
+  "main": "src/index.ts",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --local",
+    "test": "tsx test/harness.ts"
+  },
+  "dependencies": {
+    "ajv": "^8.17.1",
+    "hono": "^4.5.0",
+    "viem": "^2.19.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20240806.0",
+    "tsx": "^4.15.0",
+    "typescript": "^5.4.5",
+    "wrangler": "^3.70.0"
+  }
+}
