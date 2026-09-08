@@ -9,5 +9,8 @@
       "binding": "IDEMPOTENCY_KV",
       "id": "389e6250e24f4e50a065f844c02dab95"
     }
-  ]
+  ],
+  "vars": {
+    "FEE_RECIPIENT_ADDRESS": "0x44b28353654bf6E94687aD3af17583263c2d6834"
+  }
 }
