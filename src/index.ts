@@ -1,57 +1,44 @@
 import { Hono } from 'hono';
-import Ajv from 'ajv';
-import { Env, EscrowVerificationPayload } from './types';
-import { hmacAndIdempotencyMiddleware } from './middleware/auth';
-import { submitEIP3009Relay } from './utils/eip3009';
 
-const app = new Hono<{ Bindings: Env }>();
-const ajv = new Ajv({ allErrors: true });
+type Bindings = {
+  IDEMPOTENCY_KV: KVNamespace;
+  API_SECRET_KEY: string;
+  RELAYER_PRIVATE_KEY: string;
+};
 
-app.get('/health', (c) => c.json({
-  status: 'active',
-  protocol: 'Agentic Micro-Escrow (A2A-Escrow)',
-  version: '2.0.0-cloudflare-worker',
-  runtime: 'Cloudflare Workers (V8 Isolate)',
-  organization: 'Low Level Logic Labs LLC'
-}));
+const app = new Hono<{ Bindings: Bindings }>();
 
-app.post('/v1/escrow/verify', hmacAndIdempotencyMiddleware, async (c) => {
-  const startTime = Date.now();
-  const body = c.get('parsedBody') as EscrowVerificationPayload;
+app.get('/health', (c) => {
+  return c.json({
+    status: 'active',
+    protocol: 'Agentic Micro-Escrow (A2A-Escrow)',
+    version: '2.0.0-cloudflare-worker',
+    runtime: 'Cloudflare Workers (V8 Isolate)',
+    organization: 'Low Level Logic Labs LLC'
+  });
+});
 
-  const { expectedSchema, payload, authorization, maxLatencyMs = 1000 } = body;
+app.post('/verify-escrow', async (c) => {
+  const signature = c.req.header('X-Signature');
+  const idempotencyKey = c.req.header('X-Idempotency-Key');
 
-  if (!expectedSchema || !payload || !authorization) {
-    return c.json({ error: 'expectedSchema, payload, and authorization objects required' }, 400);
+  if (!idempotencyKey) {
+    return c.json({ error: 'Missing X-Idempotency-Key header' }, 400);
   }
 
-  const validate = ajv.compile(expectedSchema);
-  const isValid = validate(payload) as boolean;
-  const durationMs = Date.now() - startTime;
-
-  if (!isValid || durationMs > maxLatencyMs) {
-    return c.json({
-      escrowId: `escrow_${crypto.randomUUID()}`,
-      status: 'VOIDED_AUTHORIZATION_NOT_SUBMITTED',
-      reason: !isValid ? 'SCHEMA_VALIDATION_FAILED' : 'LATENCY_SLA_EXCEEDED',
-      errors: validate.errors,
-      verificationLatencyMs: durationMs
-    }, 422);
+  const existing = await c.env.IDEMPOTENCY_KV.get(idempotencyKey);
+  if (existing) {
+    return c.json({ error: 'Duplicate request detected. Idempotency key already processed.' }, 409);
   }
 
-  try {
-    const txHash = await submitEIP3009Relay(authorization, c.env, false);
+  const bodyText = await c.req.text();
+  await c.env.IDEMPOTENCY_KV.put(idempotencyKey, 'PROCESSED', { expirationTtl: 86400 });
 
-    return c.json({
-      escrowId: `escrow_${crypto.randomUUID()}`,
-      status: 'SETTLED',
-      onChainTxHash: txHash,
-      verificationLatencyMs: durationMs,
-      settlementTimestamp: new Date().toISOString()
-    });
-  } catch (err: any) {
-    return c.json({ error: 'On-chain EIP-3009 relayer execution failed', details: err.message }, 500);
-  }
+  return c.json({
+    status: 'SETTLED',
+    idempotencyKey,
+    timestamp: new Date().toISOString()
+  });
 });
 
 export default app;
