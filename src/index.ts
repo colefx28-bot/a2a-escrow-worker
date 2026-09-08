@@ -30,34 +30,10 @@ app.get('/health', (c) => {
   return c.json({
     status: 'active',
     protocol: 'Agentic Micro-Escrow (A2A-Escrow)',
-    version: '2.0.0-cloudflare-worker',
-    mode: 'zero-gas-active-ecosystem',
-    targetDailyTx: 5000,
-    projectedMonthlyNetUsdc: 2250,
+    version: '3.0.0-optimistic-clearinghouse',
+    mode: 'zero-latency-optimistic-oracle',
     runtime: 'Cloudflare Workers (V8 Isolate)',
     organization: 'Low Level Logic Labs LLC'
-  });
-});
-
-app.get('/.well-known/agent.json', (c) => {
-  return c.json({
-    schema_version: 'v1.0',
-    name: 'A2A Micro-Escrow Oracle',
-    description: 'Zero-latency micro-escrow signature verification & settlement protocol for AI agents on Base L2.',
-    url: 'https://a2a-escrow-worker.colefarrar70.workers.dev',
-    endpoints: {
-      health: '/health',
-      verifyEscrow: '/verify-escrow'
-    },
-    protocol_fee_bps: 100,
-    supported_assets: [
-      {
-        symbol: 'USDC',
-        chain: 'Base Mainnet',
-        chainId: 8453,
-        address: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'
-      }
-    ]
   });
 });
 
@@ -67,13 +43,21 @@ app.post('/verify-escrow', async (c) => {
     return c.json({ error: 'Missing X-Idempotency-Key header' }, 400);
   }
 
+  // Replay Protection Check
   const existing = await c.env.IDEMPOTENCY_KV.get(idempotencyKey);
   if (existing) {
-    return c.json({ error: 'Duplicate transaction detected.' }, 409);
+    return c.json({ error: 'Duplicate transaction / replay attempt detected.' }, 409);
   }
 
   const body = await c.req.json();
   const { from, to, value, validAfter, validBefore, nonce, signature } = body;
+
+  // Security Firewall Check: Reject infinite/dangerous authorization windows (> 24 hours)
+  const currentTime = Math.floor(Date.now() / 1000);
+  const maxAllowedExpiration = currentTime + 86400; // 24 Hours
+  if (BigInt(validBefore || '0') > BigInt(maxAllowedExpiration)) {
+    return c.json({ error: 'Security Violation: Authorization expiration window exceeds 24h limit.' }, 422);
+  }
 
   try {
     const isValid = await verifyTypedData({
@@ -97,20 +81,27 @@ app.post('/verify-escrow', async (c) => {
     }
 
     const totalVal = BigInt(value || '0');
+    // 100 bps = 1.0% base fee
     const feeVal = (totalVal * BigInt(100)) / BigInt(10000);
     const sellerPayoutVal = totalVal - feeVal;
 
+    // Generate Optimistic Clearing Voucher ID
+    const voucherId = `VOUCHER-A2A-${Date.now()}-${nonce.slice(2, 10)}`;
+
     const receipt = {
-      status: 'VERIFIED_READY_FOR_SETTLEMENT',
+      status: 'OPTIMISTIC_CLEARING_VOUCHER_ISSUED',
+      voucherId,
       idempotencyKey,
+      clearingMode: 'SUB_10MS_INSTANT_AGREEMENT',
+      securityCheck: 'PASSED_FIREWALL_FILTER',
       feeRecipient: c.env.FEE_RECIPIENT_ADDRESS || 'UNSET',
       grossValueUsdc: (Number(totalVal) / 1e6).toFixed(6),
       protocolFeeUsdc: (Number(feeVal) / 1e6).toFixed(6),
       sellerPayoutUsdc: (Number(sellerPayoutVal) / 1e6).toFixed(6),
-      instructions: 'Recipient agent submits payload to Base USDC contract on-chain.',
       payload: { from, to, value, validAfter, validBefore, nonce, signature }
     };
 
+    // Lock KV state to prevent double spending
     await c.env.IDEMPOTENCY_KV.put(idempotencyKey, JSON.stringify(receipt), { expirationTtl: 86400 });
     return c.json(receipt);
   } catch (err: any) {
