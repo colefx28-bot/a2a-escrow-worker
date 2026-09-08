@@ -7,7 +7,7 @@
   "kv_namespaces": [
     {
       "binding": "IDEMPOTENCY_KV",
-      "id": "389e6250e24f4e50a065f844c02dab95"
+      "id": "PASTE_YOUR_32_CHAR_ID_HERE"
     }
   ]
 }
