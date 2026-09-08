@@ -30,10 +30,81 @@ app.get('/health', (c) => {
   return c.json({
     status: 'active',
     protocol: 'Agentic Micro-Escrow (A2A-Escrow)',
-    version: '3.0.0-optimistic-clearinghouse',
+    version: '3.1.0-god-mode',
     mode: 'zero-latency-optimistic-oracle',
     runtime: 'Cloudflare Workers (V8 Isolate)',
     organization: 'Low Level Logic Labs LLC'
+  });
+});
+
+app.get('/.well-known/agent.json', (c) => {
+  return c.json({
+    schema_version: 'v1.0',
+    name: 'A2A Micro-Escrow Oracle',
+    description: 'Zero-latency micro-escrow signature verification & settlement protocol for AI agents on Base L2.',
+    url: 'https://a2a-escrow-worker.colefarrar70.workers.dev',
+    openapi_spec: 'https://a2a-escrow-worker.colefarrar70.workers.dev/openapi.json',
+    endpoints: {
+      health: '/health',
+      openapi: '/openapi.json',
+      verifyEscrow: '/verify-escrow'
+    },
+    protocol_fee_bps: 100,
+    supported_assets: [
+      {
+        symbol: 'USDC',
+        chain: 'Base Mainnet',
+        chainId: 8453,
+        address: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'
+      }
+    ]
+  });
+});
+
+app.get('/openapi.json', (c) => {
+  return c.json({
+    openapi: '3.0.0',
+    info: {
+      title: 'A2A Micro-Escrow Protocol API',
+      version: '3.1.0',
+      description: 'Zero-latency off-chain EIP-712 micro-escrow verification oracle for autonomous AI agents on Base L2.'
+    },
+    servers: [{ url: 'https://a2a-escrow-worker.colefarrar70.workers.dev' }],
+    paths: {
+      '/verify-escrow': {
+        post: {
+          summary: 'Verify EIP-3009 Transfer Authorization and Issue Clearing Voucher',
+          headers: {
+            'X-Idempotency-Key': { required: true, schema: { type: 'string' } }
+          },
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    from: { type: 'string', example: '0x4738463AFc32Cb7f74F0fcEd6B6819fa13387659' },
+                    to: { type: 'string', example: '0xd0Abea51c0144215412369D558334937A20658d1' },
+                    value: { type: 'string', example: '1000000' },
+                    validAfter: { type: 'string', example: '0' },
+                    validBefore: { type: 'string', example: '1893456000' },
+                    nonce: { type: 'string', example: '0xbc593d0680f5c63a5e5856965f39b3e61bb5d' },
+                    signature: { type: 'string', example: '0xfc2a865c7488d1d58c3ba1c356f708e68c' }
+                  },
+                  required: ['from', 'to', 'value', 'nonce', 'signature']
+                }
+              }
+            }
+          },
+          responses: {
+            '200': { description: 'Verified Ready for Settlement' },
+            '401': { description: 'Invalid EIP-712 Signature' },
+            '409': { description: 'Duplicate Idempotency Key' }
+          }
+        }
+      }
+    }
   });
 });
 
@@ -43,7 +114,6 @@ app.post('/verify-escrow', async (c) => {
     return c.json({ error: 'Missing X-Idempotency-Key header' }, 400);
   }
 
-  // Replay Protection Check
   const existing = await c.env.IDEMPOTENCY_KV.get(idempotencyKey);
   if (existing) {
     return c.json({ error: 'Duplicate transaction / replay attempt detected.' }, 409);
@@ -52,9 +122,8 @@ app.post('/verify-escrow', async (c) => {
   const body = await c.req.json();
   const { from, to, value, validAfter, validBefore, nonce, signature } = body;
 
-  // Security Firewall Check: Reject infinite/dangerous authorization windows (> 24 hours)
   const currentTime = Math.floor(Date.now() / 1000);
-  const maxAllowedExpiration = currentTime + 86400; // 24 Hours
+  const maxAllowedExpiration = currentTime + 86400;
   if (BigInt(validBefore || '0') > BigInt(maxAllowedExpiration)) {
     return c.json({ error: 'Security Violation: Authorization expiration window exceeds 24h limit.' }, 422);
   }
@@ -81,11 +150,8 @@ app.post('/verify-escrow', async (c) => {
     }
 
     const totalVal = BigInt(value || '0');
-    // 100 bps = 1.0% base fee
     const feeVal = (totalVal * BigInt(100)) / BigInt(10000);
     const sellerPayoutVal = totalVal - feeVal;
-
-    // Generate Optimistic Clearing Voucher ID
     const voucherId = `VOUCHER-A2A-${Date.now()}-${nonce.slice(2, 10)}`;
 
     const receipt = {
@@ -101,7 +167,6 @@ app.post('/verify-escrow', async (c) => {
       payload: { from, to, value, validAfter, validBefore, nonce, signature }
     };
 
-    // Lock KV state to prevent double spending
     await c.env.IDEMPOTENCY_KV.put(idempotencyKey, JSON.stringify(receipt), { expirationTtl: 86400 });
     return c.json(receipt);
   } catch (err: any) {
