@@ -1,0 +1,47 @@
+{
+  "type": "function",
+  "function": {
+    "name": "a2a_verify_escrow",
+    "description": "Verifies zero-gas EIP-712 signature for A2A micro-escrow on Base L2.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "from": {
+          "type": "string",
+          "description": "Buyer agent EVM address"
+        },
+        "to": {
+          "type": "string",
+          "description": "Seller agent EVM address"
+        },
+        "value": {
+          "type": "string",
+          "description": "Amount in USDC raw atomic units (6 decimals)"
+        },
+        "validAfter": {
+          "type": "string",
+          "description": "Unix timestamp start"
+        },
+        "validBefore": {
+          "type": "string",
+          "description": "Unix timestamp expiration"
+        },
+        "nonce": {
+          "type": "string",
+          "description": "32-byte hex nonce"
+        },
+        "signature": {
+          "type": "string",
+          "description": "65-byte EIP-712 signature"
+        }
+      },
+      "required": [
+        "from",
+        "to",
+        "value",
+        "nonce",
+        "signature"
+      ]
+    }
+  }
+}

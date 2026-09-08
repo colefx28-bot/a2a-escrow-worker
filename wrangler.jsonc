@@ -4,13 +4,47 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-08-15",
   "compatibility_flags": ["nodejs_compat"],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "IDEMPOTENCY_DO",
+        "class_name": "IdempotencyDO"
+      },
+      {
+        "name": "RELAYER_QUEUE",
+        "class_name": "RelayerQueue"
+      },
+      {
+        "name": "DEAL_EXPIRY",
+        "class_name": "DealExpiryDO"
+      }
+    ]
+  },
   "kv_namespaces": [
     {
-      "binding": "IDEMPOTENCY_KV",
-      "id": "389e6250e24f4e50a065f844c02dab95"
+      "binding": "DEALS_KV",
+      "id": "e4c5b921f03d4a8e91820b2d41a52b80"
+    }
+  ],
+  "triggers": {
+    "crons": ["0 * * * *", "*/2 * * * *"]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_classes": ["IdempotencyDO"]
+    },
+    {
+      "tag": "v2",
+      "new_classes": ["RelayerQueue"]
+    },
+    {
+      "tag": "v3",
+      "new_classes": ["DealExpiryDO"]
     }
   ],
   "vars": {
-    "FEE_RECIPIENT_ADDRESS": "0x44b28353654bf6E94687aD3af17583263c2d6834"
+    "FEE_SINK_ADDRESS": "0x44b28353654bf6E94687aD3af17583263c2d6834",
+    "VAULT_ADDRESS": "0xVAULT_CONTRACT_ADDRESS_HERE"
   }
 }

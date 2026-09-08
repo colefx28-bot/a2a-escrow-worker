@@ -1,0 +1,17 @@
+{
+  "name": "@lowlevellogic/plugin-a2a-escrow",
+  "description": "Zero-latency micro-escrow signature verification & settlement protocol for AI agents on Base L2.",
+  "actions": [
+    {
+      "name": "VERIFY_A2A_ESCROW",
+      "similes": [
+        "VERIFY_ESCROW",
+        "CHECK_MICRO_ESCROW_SIGNATURE"
+      ],
+      "description": "Verifies Base L2 EIP-3009 USDC micro-escrow signature off-chain.",
+      "handler": "https://a2a-escrow-worker.colefarrar70.workers.dev/verify-escrow"
+    }
+  ],
+  "evaluators": [],
+  "providers": []
+}
